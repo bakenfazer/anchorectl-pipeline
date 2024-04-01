@@ -24,8 +24,10 @@ build:
 anchore_scan:
   stage: anchore_scan
   image: anchore/enterprise-gitlab-scan:v4.0.0
+  # tags:
+  # - gitlab-anchore-scan
   needs: ["build"]
-  # you will need three variables defined (group or repo settings -> CICD -> variables)
+  ### you will need three variables defined (group or repo settings -> CICD -> variables)
   # ANCHORECTL_USERNAME
   # ANCHORECTL_PASSWORD
   # ANCHORECTL_URL
@@ -35,11 +37,11 @@ anchore_scan:
     # - anchorectl -vv system status
 
     ### make sure we have the latest anchorectl
-    - curl -sSfL  https://anchorectl-releases.anchore.io/anchorectl/install.sh  | sh -s -- -b $HOME/.local/bin v5.1.0
+    - curl -sSfL  https://anchorectl-releases.anchore.io/anchorectl/install.sh  | sh -s -- -b $HOME/.local/bin v5.3.0
 
     ### scan the image and push sbom to Anchore Enterprise:
     #
-    - anchorectl image add --no-auto-subscribe --wait --dockerfile Dockerfile --force --from registry ${ANCHORE_IMAGE}
+    - anchorectl image add --no-auto-subscribe --wait --dockerfile Dockerfile --force ${ANCHORE_IMAGE}
     #
     ### --wait is necessary if you want to immediately pull vulns or policy evaluations
     ### (including using the anchore-gitlab-scan script below)
@@ -52,16 +54,19 @@ anchore_scan:
     ### (if the image has already been scanned, the queue will essentially no-op),
     ### then grabs the result and outputs SARIF format that gitlab security dashboard
     ### can consume.  
-    - anchore-gitlab-scan > gl-container-scanning-report.json    
+    #- anchore-gitlab-scan > gl-container-scanning-report.json    
     
     ### then (optionally) get the results:
     ### the below line will get basically the same data as the "gl-container-scanning-report" above but in human-readable text table format
-    #- anchorectl image vulnerabilities ${ANCHORE_IMAGE}
+    - anchorectl image vulnerabilities ${ANCHORE_IMAGE}
+    - anchorectl image vulnerabilities ${ANCHORE_IMAGE} > vulnerability.json
     ### uncomment the below line to check policy and break the pipeline for policy violations (if you set ANCHORECTL_FAIL_BASED_ON_RESULTS up above)
-    #- anchorectl image check --detail ${ANCHORE_IMAGE}
+    - anchorectl image check --detail ${ANCHORE_IMAGE} -p Dev-bundle -f
+    - anchorectl image check --detail ${ANCHORE_IMAGE} -p Dev-bundle > policy.json
+    
 
   ### you can omit this section if you're not using GitLab Ultimate's security dashboard, but leaving it won't hurt anything  
   artifacts:
-    reports:
-      container_scanning: gl-container-scanning-report.json
-
+   paths:
+    - vulnerability.json
+    - policy.json
